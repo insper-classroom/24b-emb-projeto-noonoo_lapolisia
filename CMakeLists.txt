@@ -36,5 +36,8 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
 endif()
 
 add_subdirectory(freertos)
+add_subdirectory(ldr)
+add_subdirectory(dht11)
+add_subdirectory(lm35)
 add_subdirectory(main)
 

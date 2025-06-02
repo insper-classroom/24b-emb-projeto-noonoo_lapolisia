@@ -37,6 +37,9 @@ target_link_libraries(${TARGET_NAME}
     pico_lwip_mqtt
     pico_mbedtls
     pico_lwip_mbedtls
+    ldr
+    dht11
+    lm35
     )
 target_compile_definitions(${TARGET_NAME} PRIVATE
     WIFI_SSID=\"${WIFI_SSID}\"

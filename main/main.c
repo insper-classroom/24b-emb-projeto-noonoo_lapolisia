@@ -7,140 +7,7 @@
 //
 // Created by elliot on 25/05/24.
 //
-#include "pico/stdlib.h"
-#include "pico/cyw43_arch.h"
-#include "pico/unique_id.h"
-#include "hardware/gpio.h"
-#include "hardware/irq.h"
-#include "hardware/adc.h"
-#include "lwip/apps/mqtt.h"
-#include "lwip/apps/mqtt_priv.h" // needed to set hostname
-#include "lwip/dns.h"
-#include "lwip/altcp_tls.h"
-
-#define WIFI_SSID "Henrique"
-#define WIFI_PASSWORD "12345678"
-#define MQTT_SERVER "192.168.230.53"
-
-// Temperature
-#ifndef TEMPERATURE_UNITS
-#define TEMPERATURE_UNITS 'C' // Set to 'F' for Fahrenheit
-#endif
-
-#ifndef MQTT_SERVER
-#error Need to define MQTT_SERVER
-#endif
-
-#ifndef MQTT_CERT_INC
-// If MQTT_CERT_INC wasn’t defined by the build, point it at our dummy
-#  define MQTT_CERT_INC "no_cert.h"
-#endif
-
-// This file includes your client certificate for client server authentication
-#ifdef MQTT_CERT_INC
-#include MQTT_CERT_INC
-#endif
-
-#ifndef MQTT_TOPIC_LEN
-#define MQTT_TOPIC_LEN 100
-#endif
-
-typedef struct {
-    mqtt_client_t* mqtt_client_inst;
-    struct mqtt_connect_client_info_t mqtt_client_info;
-    char data[MQTT_OUTPUT_RINGBUF_SIZE];
-    char topic[MQTT_TOPIC_LEN];
-    uint32_t len;
-    ip_addr_t mqtt_server_address;
-    bool connect_done;
-    int subscribe_count;
-    bool stop_client;
-} MQTT_CLIENT_DATA_T;
-
-#ifndef DEBUG_printf
-#ifndef NDEBUG
-#define DEBUG_printf printf
-#else
-#define DEBUG_printf(...)
-#endif
-#endif
-
-#ifndef INFO_printf
-#define INFO_printf printf
-#endif
-
-#ifndef ERROR_printf
-#define ERROR_printf printf
-#endif
-
-// EXTERNAL LED
-#define RED_LED 16
-
-// how often to measure our temperature
-#define TEMP_WORKER_TIME_S 10
-
-// keep alive in seconds
-#define MQTT_KEEP_ALIVE_S 60
-
-// qos passed to mqtt_subscribe
-// At most once (QoS 0)
-// At least once (QoS 1)
-// Exactly once (QoS 2)
-#define MQTT_SUBSCRIBE_QOS 1
-#define MQTT_PUBLISH_QOS 1
-#define MQTT_PUBLISH_RETAIN 0
-
-// topic used for last will and testament
-#define MQTT_WILL_TOPIC "/online"
-#define MQTT_WILL_MSG "0"
-#define MQTT_WILL_QOS 1
-
-#ifndef MQTT_DEVICE_NAME
-#define MQTT_DEVICE_NAME "pico"
-#endif
-
-// Set to 1 to add the client name to topics, to support multiple devices using the same server
-#ifndef MQTT_UNIQUE_TOPIC
-#define MQTT_UNIQUE_TOPIC 0
-#endif
-
-/* References for this implementation:
- * raspberry-pi-pico-c-sdk.pdf, Section '4.1.1. hardware_adc'
- * pico-examples/adc/adc_console/adc_console.c */
-static float read_onboard_temperature(const char unit) {
-    adc_select_input(4);
-
-    /* 12-bit conversion, assume max value == ADC_VREF == 3.3 V */
-    const float conversionFactor = 3.3f / (1 << 12);
-
-    float adc = (float)adc_read() * conversionFactor;
-    float tempC = 27.0f - (adc - 0.706f) / 0.001721f;
-
-    if (unit == 'C') {
-        return tempC;
-    } else if (unit == 'F') {
-        return tempC * 9.0f / 5.0f + 32.0f;
-    } else {
-        // invalid unit: default to Celsius (or handle error)
-        return tempC;
-    }
-}
-
-static int read_luminosity() {
-    adc_select_input(0);
-    uint16_t raw = adc_read(); // valor de 0 a 4095
-    float voltage = raw * 3.3f / 4095.0f;
-
-    if (voltage < 0.6f) {
-        return 1;
-    } else if (voltage < 1.5f) {
-        return 2;
-    } else if (voltage < 2.9f) {
-        return 3;
-    } else {
-        return 4;
-    }
-}
+#include "main.h"
 
 static void pub_request_cb(__unused void *arg, err_t err) {
     if (err != 0) {
@@ -158,39 +25,6 @@ static const char *full_topic(MQTT_CLIENT_DATA_T *state, const char *name) {
 #endif
 }
 
-static void control_led(MQTT_CLIENT_DATA_T *state, bool on) {
-    // Publish state on /state topic and on/off led board
-    const char* message = on ? "On" : "Off";
-    if (on)
-        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-    else
-        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
-
-    mqtt_publish(state->mqtt_client_inst, full_topic(state, "/led/state"), message, strlen(message), MQTT_PUBLISH_QOS, MQTT_PUBLISH_RETAIN, pub_request_cb, state);
-}
-
-static void control_external_led(MQTT_CLIENT_DATA_T *state, bool on) {
-    // Publish state on /state topic and on/off led board
-    const char* message = on ? "On" : "Off";
-    gpio_put(RED_LED, on ? 1 : 0);
-
-    mqtt_publish(state->mqtt_client_inst, full_topic(state, "/led_red/state"), message, strlen(message), MQTT_PUBLISH_QOS, MQTT_PUBLISH_RETAIN, pub_request_cb, state);
-}
-
-static void publish_temperature(MQTT_CLIENT_DATA_T *state) {
-    static float old_temperature;
-    const char *temperature_key = full_topic(state, "/temperature");
-    float temperature = read_onboard_temperature(TEMPERATURE_UNITS);
-    if (temperature != old_temperature) {
-        old_temperature = temperature;
-        // Publish temperature on /temperature topic
-        char temp_str[16];
-        snprintf(temp_str, sizeof(temp_str), "%.2f", temperature);
-        INFO_printf("Publishing %s to %s\n", temp_str, temperature_key);
-        mqtt_publish(state->mqtt_client_inst, temperature_key, temp_str, strlen(temp_str), MQTT_PUBLISH_QOS, MQTT_PUBLISH_RETAIN, pub_request_cb, state);
-    }
-}
-
 static void publish_luminosity(MQTT_CLIENT_DATA_T *state) {
     static int old_luminosity;
     const char *luminosity_key = full_topic(state, "/light_sensor");
@@ -202,6 +36,44 @@ static void publish_luminosity(MQTT_CLIENT_DATA_T *state) {
         snprintf(lumi_str, sizeof(lumi_str), "%.2f", luminosity);
         INFO_printf("Publishing %s to %s\n", lumi_str, luminosity_key);
         mqtt_publish(state->mqtt_client_inst, luminosity_key, lumi_str, strlen(lumi_str), MQTT_PUBLISH_QOS, MQTT_PUBLISH_RETAIN, pub_request_cb, state);
+    }
+}
+
+// NOVO: Função para publicar temperatura do LM35
+static void publish_lm35_temperature(MQTT_CLIENT_DATA_T *state) {
+    static float old_lm35_temp;
+    const char *lm35_temp_key = full_topic(state, "/lm35_temp");
+    float temperature = read_lm35_temperature(TEMPERATURE_UNITS);
+
+    // Adicionar uma pequena tolerância para evitar publicações por flutuações mínimas
+    if (fabsf(temperature - old_lm35_temp) > 0.1f) {
+        old_lm35_temp = temperature;
+        char temp_str[16];
+        snprintf(temp_str, sizeof(temp_str), "%.2f", temperature);
+        INFO_printf("Publishing LM35 Temp %s to %s\n", temp_str, lm35_temp_key);
+        mqtt_publish(state->mqtt_client_inst, lm35_temp_key, temp_str, strlen(temp_str), MQTT_PUBLISH_QOS, MQTT_PUBLISH_RETAIN, pub_request_cb, state);
+    }
+}
+
+// NOVO: Função para publicar dados do DHT11
+static void publish_dht11_data(MQTT_CLIENT_DATA_T *state) {
+    static float old_dht_temp;
+    static float old_dht_humidity;
+    
+    const char *dht_humidity_key = full_topic(state, "/dht11_humidity");
+
+    dht11_reading_t reading = read_dht11_data();
+
+    if (reading.valid) {
+        if (fabsf(reading.humidity - old_dht_humidity) > 0.1f) {
+            old_dht_humidity = reading.humidity;
+            char hum_str[16];
+            snprintf(hum_str, sizeof(hum_str), "%.2f", reading.humidity);
+            INFO_printf("Publishing DHT11 Humidity %s to %s\n", hum_str, dht_humidity_key);
+            mqtt_publish(state->mqtt_client_inst, dht_humidity_key, hum_str, strlen(hum_str), MQTT_PUBLISH_QOS, MQTT_PUBLISH_RETAIN, pub_request_cb, state);
+        }
+    } else {
+        INFO_printf("Failed to read from DHT11 sensor.\n");
     }
 }
 
@@ -229,8 +101,6 @@ static void unsub_request_cb(void *arg, err_t err) {
 
 static void sub_unsub_topics(MQTT_CLIENT_DATA_T* state, bool sub) {
     mqtt_request_cb_t cb = sub ? sub_request_cb : unsub_request_cb;
-    mqtt_sub_unsub(state->mqtt_client_inst, full_topic(state, "/led"), MQTT_SUBSCRIBE_QOS, cb, state, sub);
-    mqtt_sub_unsub(state->mqtt_client_inst, full_topic(state, "/red_led"), MQTT_SUBSCRIBE_QOS, cb, state, sub);
     mqtt_sub_unsub(state->mqtt_client_inst, full_topic(state, "/print"), MQTT_SUBSCRIBE_QOS, cb, state, sub);
     mqtt_sub_unsub(state->mqtt_client_inst, full_topic(state, "/ping"), MQTT_SUBSCRIBE_QOS, cb, state, sub);
     mqtt_sub_unsub(state->mqtt_client_inst, full_topic(state, "/exit"), MQTT_SUBSCRIBE_QOS, cb, state, sub);
@@ -248,17 +118,7 @@ static void mqtt_incoming_data_cb(void *arg, const u8_t *data, u16_t len, u8_t f
     state->data[len] = '\0';
 
     DEBUG_printf("Topic: %s, Message: %s\n", state->topic, state->data);
-    if (strcmp(basic_topic, "/led") == 0) {
-        if (lwip_stricmp((const char *)state->data, "On") == 0 || strcmp((const char *)state->data, "1") == 0)
-            control_led(state, true);
-        else if (lwip_stricmp((const char *)state->data, "Off") == 0 || strcmp((const char *)state->data, "0") == 0)
-            control_led(state, false);
-    } else if (strcmp(basic_topic, "/red_led") == 0) {
-        if (lwip_stricmp((const char *)state->data, "On") == 0 || strcmp((const char *)state->data, "1") == 0)
-            control_external_led(state, true);
-        else if (lwip_stricmp((const char *)state->data, "Off") == 0 || strcmp((const char *)state->data, "0") == 0)
-            control_external_led(state, false);
-    } else if (strcmp(basic_topic, "/print") == 0) {
+    if (strcmp(basic_topic, "/print") == 0) {
         INFO_printf("%.*s\n", len, data);
     } else if (strcmp(basic_topic, "/ping") == 0) {
         char buf[11];
@@ -275,13 +135,21 @@ static void mqtt_incoming_publish_cb(void *arg, const char *topic, u32_t tot_len
     strncpy(state->topic, topic, sizeof(state->topic));
 }
 
-static void temperature_worker_fn(async_context_t *context, async_at_time_worker_t *worker) {
+// NOVO: Worker para LM35
+static void lm35_worker_fn(async_context_t *context, async_at_time_worker_t *worker) {
     MQTT_CLIENT_DATA_T* state = (MQTT_CLIENT_DATA_T*)worker->user_data;
-    publish_temperature(state);
-    async_context_add_at_time_worker_in_ms(context, worker, TEMP_WORKER_TIME_S * 1000);
+    publish_lm35_temperature(state);
+    async_context_add_at_time_worker_in_ms(context, worker, LM35_WORKER_TIME_S * 1000);
 }
-static async_at_time_worker_t temperature_worker = { .do_work = temperature_worker_fn };
+static async_at_time_worker_t lm35_worker = { .do_work = lm35_worker_fn };
 
+// NOVO: Worker para DHT11
+static void dht11_worker_fn(async_context_t *context, async_at_time_worker_t *worker) {
+    MQTT_CLIENT_DATA_T* state = (MQTT_CLIENT_DATA_T*)worker->user_data;
+    publish_dht11_data(state);
+    async_context_add_at_time_worker_in_ms(context, worker, DHT11_WORKER_TIME_S * 1000);
+}
+static async_at_time_worker_t dht11_worker = { .do_work = dht11_worker_fn };
 
 static void luminosity_worker_fn(async_context_t *context, async_at_time_worker_t *worker) {
     MQTT_CLIENT_DATA_T* state = (MQTT_CLIENT_DATA_T*)worker->user_data;
@@ -301,13 +169,17 @@ static void mqtt_connection_cb(mqtt_client_t *client, void *arg, mqtt_connection
             mqtt_publish(state->mqtt_client_inst, state->mqtt_client_info.will_topic, "1", 1, MQTT_WILL_QOS, true, pub_request_cb, state);
         }
 
-        // Publish temperature every 10 sec if it's changed
-        temperature_worker.user_data = state;
-        async_context_add_at_time_worker_in_ms(cyw43_arch_async_context(), &temperature_worker, 0);
-
         // Publish luminosity every 5 sec if it's changed
         luminosity_worker.user_data = state;
         async_context_add_at_time_worker_in_ms(cyw43_arch_async_context(), &luminosity_worker, 0);
+
+        // NOVO: Iniciar workers para LM35 e DHT11
+        lm35_worker.user_data = state;
+        async_context_add_at_time_worker_in_ms(cyw43_arch_async_context(), &lm35_worker, 1000); // Delay inicial de 1s
+
+        dht11_worker.user_data = state;
+        async_context_add_at_time_worker_in_ms(cyw43_arch_async_context(), &dht11_worker, 2000); // Delay inicial de 2s
+
     } else if (status == MQTT_CONNECT_DISCONNECTED) {
         if (!state->connect_done) {
             panic("Failed to connect to mqtt server");
@@ -357,21 +229,7 @@ static void dns_found(const char *hostname, const ip_addr_t *ipaddr, void *arg) 
     }
 }
 
-int main(void) {
-    stdio_init_all();
-    INFO_printf("mqtt client starting\n");
-    
-    adc_init();
-    adc_set_temp_sensor_enabled(true);
-    adc_select_input(4);
-
-    // ADC LDR
-    adc_gpio_init(26);
-
-    gpio_init(RED_LED);
-    gpio_set_dir(RED_LED, GPIO_OUT);
-    gpio_put(RED_LED, 1);
-    
+void TaskComunicacao(void *params) {
     static MQTT_CLIENT_DATA_T state;
 
     if (cyw43_arch_init()) {
@@ -452,4 +310,23 @@ int main(void) {
 
     INFO_printf("mqtt client exiting\n");
     return 0;
+}
+
+int main(void) {
+    stdio_init_all();
+    INFO_printf("mqtt client starting\n");
+    adc_init();
+    adc_gpio_init(LDR_GPIO_PIN);
+    adc_gpio_init(LM35_GPIO_PIN);
+    gpio_init(DHT11_GPIO_PIN);
+
+
+    TaskHandle_t xHandle1;
+    // TaskHandle_t xHandle2;
+
+    xTaskCreate(TaskComunicacao, "task comunicacao", 4096, NULL, tskIDLE_PRIORITY, &(xHandle1));
+
+    vTaskCoreAffinitySet(xHandle1, CORE_0);
+
+    vTaskStartScheduler();
 }
