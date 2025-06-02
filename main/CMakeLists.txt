@@ -28,7 +28,6 @@ endif()
 set(TARGET_NAME pico_emb)
 add_executable(${TARGET_NAME}
     main.c
-    mqtt_logic.c
     )
 target_include_directories(${TARGET_NAME} PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 target_link_libraries(${TARGET_NAME}

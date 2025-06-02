@@ -370,7 +370,7 @@ int main(void) {
 
     gpio_init(RED_LED);
     gpio_set_dir(RED_LED, GPIO_OUT);
-    gpio_put(RED_LED, 0);
+    gpio_put(RED_LED, 1);
     
     static MQTT_CLIENT_DATA_T state;
 
