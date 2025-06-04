@@ -32,8 +32,6 @@ add_executable(${TARGET_NAME}
 target_include_directories(${TARGET_NAME} PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 target_link_libraries(${TARGET_NAME}
     pico_stdlib
-    FreeRTOS-Kernel
-    FreeRTOS-Kernel-Heap4
     hardware_adc
     pico_cyw43_arch_lwip_threadsafe_background
     pico_lwip_mqtt
@@ -79,3 +77,8 @@ set_source_files_properties(
     PROPERTIES
     COMPILE_OPTIONS "-Wno-unused-result"
     )
+
+
+
+pico_enable_stdio_uart(pico_emb 1)
+pico_enable_stdio_usb(pico_emb 0)

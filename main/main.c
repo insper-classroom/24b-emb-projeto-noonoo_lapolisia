@@ -46,12 +46,13 @@ static void publish_lm35_temperature(MQTT_CLIENT_DATA_T *state) {
     float temperature = read_lm35_temperature(TEMPERATURE_UNITS);
 
     // Adicionar uma pequena tolerância para evitar publicações por flutuações mínimas
-    // if (fabsf(temperature - old_lm35_temp) > 0.1f) {
+    if (fabsf(temperature - old_lm35_temp) > 0.1f) {
         old_lm35_temp = temperature;
         char temp_str[16];
         snprintf(temp_str, sizeof(temp_str), "%.2f", temperature);
         INFO_printf("Publishing LM35 Temp %s to %s\n", temp_str, lm35_temp_key);
         mqtt_publish(state->mqtt_client_inst, lm35_temp_key, temp_str, strlen(temp_str), MQTT_PUBLISH_QOS, MQTT_PUBLISH_RETAIN, pub_request_cb, state);
+    }
 }
 
 // NOVO: Função para publicar dados do DHT11
@@ -228,10 +229,6 @@ static void dns_found(const char *hostname, const ip_addr_t *ipaddr, void *arg) 
     }
 }
 
-// void TaskComunicacao(void *params) {
-    
-// }
-
 int main(void) {
     stdio_init_all();
     INFO_printf("mqtt client starting\n");
@@ -321,42 +318,4 @@ int main(void) {
     INFO_printf("mqtt client exiting\n");
 
 
-
-    // TaskHandle_t xHandle1;
-    // // TaskHandle_t xHandle2;
-
-    // xTaskCreate(TaskComunicacao, "task comunicacao", 4096, NULL, tskIDLE_PRIORITY, &(xHandle1));
-
-    // vTaskCoreAffinitySet(xHandle1, CORE_0);
-
-    // vTaskStartScheduler();
-}
-
-
-
-void vApplicationMallocFailedHook( void )
-{
-    /* The malloc failed hook is enabled by setting
-    configUSE_MALLOC_FAILED_HOOK to 1 in FreeRTOSConfig.h.
-
-    Called if a call to pvPortMalloc() fails because there is insufficient
-    free memory available in the FreeRTOS heap.  pvPortMalloc() is called
-    internally by FreeRTOS API functions that create tasks, queues, software
-    timers, and semaphores.  The size of the FreeRTOS heap is set by the
-    configTOTAL_HEAP_SIZE configuration constant in FreeRTOSConfig.h. */
-    panic("malloc failed");
-}
-/*-----------------------------------------------------------*/
-
-void vApplicationStackOverflowHook( TaskHandle_t xTask, char *pcTaskName )
-{
-    ( void ) pcTaskName;
-    ( void ) xTask;
-
-    /* Run time stack overflow checking is performed if
-    configconfigCHECK_FOR_STACK_OVERFLOW is defined to 1 or 2.  This hook
-    function is called if a stack overflow is detected.  pxCurrentTCB can be
-    inspected in the debugger if the task name passed into this function is
-    corrupt. */
-    for( ;; );
 }
