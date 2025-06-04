@@ -83,9 +83,9 @@ typedef struct {
 #define RED_LED 16
 
 // how often to measure our temperature
-#define TEMP_WORKER_TIME_S 10
-#define LM35_WORKER_TIME_S 12
-#define DHT11_WORKER_TIME_S 15
+#define TEMP_WORKER_TIME_S 2
+#define LM35_WORKER_TIME_S 3
+#define DHT11_WORKER_TIME_S 3
 
 // keep alive in seconds
 #define MQTT_KEEP_ALIVE_S 60

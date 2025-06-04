@@ -46,13 +46,12 @@ static void publish_lm35_temperature(MQTT_CLIENT_DATA_T *state) {
     float temperature = read_lm35_temperature(TEMPERATURE_UNITS);
 
     // Adicionar uma pequena tolerância para evitar publicações por flutuações mínimas
-    if (fabsf(temperature - old_lm35_temp) > 0.1f) {
+    // if (fabsf(temperature - old_lm35_temp) > 0.1f) {
         old_lm35_temp = temperature;
         char temp_str[16];
         snprintf(temp_str, sizeof(temp_str), "%.2f", temperature);
         INFO_printf("Publishing LM35 Temp %s to %s\n", temp_str, lm35_temp_key);
         mqtt_publish(state->mqtt_client_inst, lm35_temp_key, temp_str, strlen(temp_str), MQTT_PUBLISH_QOS, MQTT_PUBLISH_RETAIN, pub_request_cb, state);
-    }
 }
 
 // NOVO: Função para publicar dados do DHT11
@@ -229,7 +228,18 @@ static void dns_found(const char *hostname, const ip_addr_t *ipaddr, void *arg) 
     }
 }
 
-void TaskComunicacao(void *params) {
+// void TaskComunicacao(void *params) {
+    
+// }
+
+int main(void) {
+    stdio_init_all();
+    INFO_printf("mqtt client starting\n");
+    adc_init();
+    adc_gpio_init(LDR_GPIO_PIN);
+    adc_gpio_init(LM35_GPIO_PIN);
+    gpio_init(DHT11_GPIO_PIN);
+
     static MQTT_CLIENT_DATA_T state;
 
     if (cyw43_arch_init()) {
@@ -310,25 +320,16 @@ void TaskComunicacao(void *params) {
 
     INFO_printf("mqtt client exiting\n");
 
-}
-
-int main(void) {
-    stdio_init_all();
-    INFO_printf("mqtt client starting\n");
-    adc_init();
-    adc_gpio_init(LDR_GPIO_PIN);
-    adc_gpio_init(LM35_GPIO_PIN);
-    gpio_init(DHT11_GPIO_PIN);
 
 
-    TaskHandle_t xHandle1;
-    // TaskHandle_t xHandle2;
+    // TaskHandle_t xHandle1;
+    // // TaskHandle_t xHandle2;
 
-    xTaskCreate(TaskComunicacao, "task comunicacao", 4096, NULL, tskIDLE_PRIORITY, &(xHandle1));
+    // xTaskCreate(TaskComunicacao, "task comunicacao", 4096, NULL, tskIDLE_PRIORITY, &(xHandle1));
 
-    vTaskCoreAffinitySet(xHandle1, CORE_0);
+    // vTaskCoreAffinitySet(xHandle1, CORE_0);
 
-    vTaskStartScheduler();
+    // vTaskStartScheduler();
 }
 
 
