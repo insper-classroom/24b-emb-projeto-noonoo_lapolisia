@@ -1,7 +1,9 @@
-#include <FreeRTOS.h>
-#include <task.h>
-#include <semphr.h>
-#include <queue.h>
+#include "FreeRTOS.h" /* Must come first. */
+#include "task.h"     /* RTOS task related API prototypes. */
+#include "queue.h"    /* RTOS queue related API prototypes. */
+#include "timers.h"   /* Software timer related API prototypes. */
+#include "semphr.h"   /* Semaphore related API prototypes. */
+
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
 #include "pico/unique_id.h"

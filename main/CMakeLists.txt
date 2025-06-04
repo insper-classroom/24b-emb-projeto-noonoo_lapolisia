@@ -32,6 +32,8 @@ add_executable(${TARGET_NAME}
 target_include_directories(${TARGET_NAME} PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 target_link_libraries(${TARGET_NAME}
     pico_stdlib
+    FreeRTOS-Kernel
+    FreeRTOS-Kernel-Heap4
     hardware_adc
     pico_cyw43_arch_lwip_threadsafe_background
     pico_lwip_mqtt
@@ -41,6 +43,14 @@ target_link_libraries(${TARGET_NAME}
     dht11
     lm35
     )
+    
+
+target_include_directories(${TARGET_NAME} PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/../include
+)
+
+
+    
 target_compile_definitions(${TARGET_NAME} PRIVATE
     WIFI_SSID=\"${WIFI_SSID}\"
     WIFI_PASSWORD=\"${WIFI_PASSWORD}\"

@@ -35,7 +35,9 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
   add_compile_options(-Wno-maybe-uninitialized)
 endif()
 
-add_subdirectory(freertos)
+set(FREERTOS_KERNEL_PATH ${CMAKE_CURRENT_LIST_DIR}/freertos)
+include(FreeRTOS_Kernel_import.cmake)
+
 add_subdirectory(ldr)
 add_subdirectory(dht11)
 add_subdirectory(lm35)
